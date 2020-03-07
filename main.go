@@ -25,10 +25,12 @@ func main() {
 	}
 
 	// Validate path before downloading in order to fail fast
+	log.Println("Validating filepath...")
 	if !isValidPath(filepath) {
 		log.Fatalf("Cannot write to '%s'. Check that the directory exists, permissions are sufficient and there is not already a file with that name.", filepath)
 	}
 
+	log.Println("Starting download...")
 	stream, err := download(url, bytesPerSecond)
 	if err != nil {
 		log.Fatalf("Error while attempting to fetch '%s': %v", url, err)
@@ -41,11 +43,14 @@ func main() {
 		log.Fatal("An error occurred while hashing the download: ", err.Error())
 	}
 
+	log.Println("Saving to file...")
 	hexHash := hasher.Hex()
 	err = writeFile(filepath, hexHash)
 	if err != nil {
 		log.Fatalf("Error while trying to write hash '%s' to file '%s'. Make sure path exists, permissions are correct and there is disk space available", hexHash, filepath)
 	}
+
+	log.Println("All done, have a nice day!")
 }
 
 func download(url string, bytesPerSecond int) (io.ReadCloser, error) {
@@ -55,6 +60,7 @@ func download(url string, bytesPerSecond int) (io.ReadCloser, error) {
 	}
 	var reader io.ReadCloser = res.Body
 	if bytesPerSecond > 0 {
+		log.Printf("Downloading at %d bytes per second", bytesPerSecond)
 		reader = slowread.NewReader(reader, bytesPerSecond)
 	}
 	return reader, nil
