@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"github.com/FcoManueel/imtdigest/imthash"
 	"io"
 	"log"
 	"net/http"
@@ -29,7 +30,7 @@ func main() {
 		log.Fatalf("Error while attempting to fetch '%s': %v", url, err)
 	}
 
-	hasher := &Hash{}
+	hasher := &imthash.Hash{}
 	io.Copy(hasher, stream)
 
 	hexHash := hasher.Hex()
