@@ -3,7 +3,9 @@ package main
 import (
 	"flag"
 	"github.com/FcoManueel/imtdigest/imthash"
+	"github.com/FcoManueel/imtdigest/slowread"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -12,50 +14,74 @@ import (
 func main() {
 	var filepath, url string
 	var bytesPerSecond int
-	// TODO Remove default values for string flags
-	flag.StringVar(&filepath, "file", "/tmp/imt_hash.txt", "Filepath for output (required)")
-	flag.StringVar(&url, "url", "https://jsonplaceholder.typicode.com/todos/1", "Url to download (required)")
-	flag.IntVar(&bytesPerSecond, "throttle", 0, "Max download rate in bytes per second (optional)")
+	flag.StringVar(&filepath, "file", "", "The path of the file where the output will be saved. (required)")
+	flag.StringVar(&url, "url", "", "The URL from which the data will be fetched. (required)")
+	flag.IntVar(&bytesPerSecond, "rate", 0, "Limits the max download rate. Units are in bytes/second. (optional)")
 	flag.Parse()
 
-	if filepath == "" {
-		log.Fatalf("Please provide a valid output file (-file flag)")
+	if filepath == "" || url == "" {
+		flag.PrintDefaults()
+		os.Exit(1)
 	}
-	if url == "" {
-		log.Fatalf("Please provide a valid url (-url flag)")
+
+	// Validate path before downloading in order to fail fast
+	if !isValidPath(filepath) {
+		log.Fatalf("Cannot write to '%s'. Check that the directory exists, permissions are sufficient and there is not already a file with that name.", filepath)
 	}
 
 	stream, err := download(url, bytesPerSecond)
 	if err != nil {
 		log.Fatalf("Error while attempting to fetch '%s': %v", url, err)
 	}
+	defer stream.Close()
 
 	hasher := &imthash.Hash{}
-	io.Copy(hasher, stream)
+	_, err = io.Copy(hasher, stream)
+	if err != nil {
+		log.Fatal("An error occurred while hashing the download: ", err.Error())
+	}
 
 	hexHash := hasher.Hex()
 	err = writeFile(filepath, hexHash)
 	if err != nil {
 		log.Fatalf("Error while trying to write hash '%s' to file '%s'. Make sure path exists, permissions are correct and there is disk space available", hexHash, filepath)
 	}
-	// TODO Update README.md
 }
 
 func download(url string, bytesPerSecond int) (io.ReadCloser, error) {
-	// TODO Implement throttling for download
 	res, err := http.Get(url)
 	if err != nil {
 		return nil, err
 	}
-	return res.Body, nil
+	var reader io.ReadCloser = res.Body
+	if bytesPerSecond > 0 {
+		reader = slowread.NewReader(reader, bytesPerSecond)
+	}
+	return reader, nil
 }
 
-func writeFile(filepath, data string) error {
+// isValidPath returns true if the path can be written to and a file with that name doesn't exist
+func isValidPath(filepath string) bool {
+	if _, err := os.Stat(filepath); err == nil {
+		return false
+	}
+	if err := ioutil.WriteFile(filepath, nil, 0644); err == nil {
+		os.Remove(filepath) // File can be saved. Clean up
+		return true
+	}
+	return false
+}
+
+func writeFile(filepath, data string) (err error) {
 	f, err := os.Create(filepath)
 	if err != nil {
 		return err
 	}
-	defer f.Close() // TODO handle potential errors occurring here
+	defer func() {
+		if e := f.Close(); e != nil && err == nil {
+			err = e
+		}
+	}()
 	_, err = f.WriteString(data)
 	return err
 }
