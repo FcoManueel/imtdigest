@@ -1,19 +1,28 @@
 package main
 
 import (
-	"fmt"
+	"flag"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 )
 
 func main() {
-	// TODO Add CLI flags, parse and validation
-	filepath := "/tmp/imt_hash.txt"
-	bytesPerSecond := 0
-	url := "https://jsonplaceholder.typicode.com/todos/1"
+	var filepath, url string
+	var bytesPerSecond int
+	// TODO Remove default values for string flags
+	flag.StringVar(&filepath, "file", "/tmp/imt_hash.txt", "Filepath for output (required)")
+	flag.StringVar(&url, "url", "https://jsonplaceholder.typicode.com/todos/1", "Url to download (required)")
+	flag.IntVar(&bytesPerSecond, "throttle", 0, "Max download rate in bytes per second (optional)")
+	flag.Parse()
+
+	if filepath == "" {
+		log.Fatalf("Please provide a valid output file (-file flag)")
+	}
+	if url == "" {
+		log.Fatalf("Please provide a valid url (-url flag)")
+	}
 
 	stream, err := download(url, bytesPerSecond)
 	if err != nil {
@@ -21,10 +30,7 @@ func main() {
 	}
 
 	hasher := &Hash{}
-	// TODO Connect download stream stream to hasher
-	content, _ := ioutil.ReadAll(stream)
-	fmt.Println(string(content))
-	_ = stream
+	io.Copy(hasher, stream)
 
 	hexHash := hasher.Hex()
 	err = writeFile(filepath, hexHash)
